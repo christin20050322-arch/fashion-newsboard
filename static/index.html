@@ -10,42 +10,41 @@
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,700&family=Playfair+Display:ital,wght@0,500;0,600;1,500&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
 <style>
   :root {
-    --paper: #F3F3F6;         
-    --cream-card: #FFFFFF;    
-    --indigo-dark: #1E1B33;   
+    --paper: #F3F3F6;
+    --cream-card: #FFFFFF;
+    --indigo-dark: #1E1B33;
     --lavender-light: #ECEBF3;
-    --accent-purple: #8B85BD; 
-    --grey-text: #6B6880;     
+    --accent-purple: #8B85BD;
+    --grey-text: #6B6880;
   }
-  
-  body { 
-    font-family: 'DM Sans', sans-serif; 
-    background-color: var(--paper); 
-    color: var(--indigo-dark); 
+
+  body {
+    font-family: 'DM Sans', sans-serif;
+    background-color: var(--paper);
+    color: var(--indigo-dark);
     letter-spacing: -0.01em;
   }
 
   .font-serif { font-family: 'Playfair Display', serif; }
-  
+
   .soft-card {
     background-color: var(--cream-card);
-    border-radius: 1.75rem; 
+    border-radius: 1.75rem;
     border: 1px solid rgba(225, 223, 235, 0.6);
     box-shadow: 0 4px 20px -2px rgba(30, 27, 51, 0.02);
   }
 
-  .masthead { 
+  .masthead {
     font-family: 'DM Sans', sans-serif;
     font-weight: 500;
     letter-spacing: -0.04em;
     color: var(--indigo-dark);
   }
 
-  /* 放大了按鈕的基礎字級與 padding */
   .cat-chip {
     font-size: 0.85rem; padding: 8px 22px; font-weight: 500; letter-spacing: 0.03em;
     white-space: nowrap; transition: all .15s ease;
-    border-radius: 9999px; 
+    border-radius: 9999px;
     border: 1px solid var(--lavender-light);
     background: var(--cream-card);
     color: var(--grey-text);
@@ -68,8 +67,31 @@
     transform: translateY(-3px);
   }
 
-  /* 放大標籤字體 */
   .eyebrow { font-size: 0.75rem; letter-spacing: 0.1em; text-transform: uppercase; color: var(--accent-purple); font-weight: 600; }
+
+  /* ---- 文字雲樣式 ---- */
+  #wordCloud {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem 1rem;
+    min-height: 140px;
+    padding: 1rem 0.5rem;
+  }
+  .cloud-word {
+    font-family: 'Playfair Display', serif;
+    font-weight: 600;
+    line-height: 1;
+    white-space: nowrap;
+    cursor: default;
+    transition: transform .15s ease, opacity .15s ease;
+    opacity: 0.92;
+  }
+  .cloud-word:hover {
+    transform: scale(1.08);
+    opacity: 1;
+  }
 </style>
 </head>
 <body class="min-h-screen pb-24 relative">
@@ -95,8 +117,8 @@
 
 <main class="max-w-7xl mx-auto px-6 md:px-12 py-12">
 
-  <section class="soft-card grid grid-cols-1 md:grid-cols-12 gap-8 items-center p-6 md:p-8 mb-16 relative overflow-hidden bg-white">
-    
+  <section class="soft-card grid grid-cols-1 md:grid-cols-12 gap-8 items-center p-6 md:p-8 mb-10 relative overflow-hidden bg-white">
+
     <div class="md:col-span-3 flex flex-col items-center justify-center text-center border-b md:border-b-0 md:border-r border-[#ECEBF3] pb-6 md:pb-0 md:pr-6 h-full">
       <p class="eyebrow mb-3">Total Briefs</p>
       <p class="font-display text-6xl md:text-7xl font-black leading-none text-[var(--indigo-dark)] tracking-tighter" id="totalCount">0</p>
@@ -114,6 +136,16 @@
       <ul class="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-4 text-sm" id="catLegend">
         </ul>
     </div>
+  </section>
+
+  <!-- 每日重點文字雲 -->
+  <section class="soft-card p-6 md:p-8 mb-16 bg-white">
+    <div class="flex items-center justify-between mb-2">
+      <p class="eyebrow text-gray-400 tracking-[0.2em]">Daily Keyword Cloud · 每日重點文字雲</p>
+      <span class="text-xs text-gray-400" id="cloudRangeLabel"></span>
+    </div>
+    <div id="wordCloud"></div>
+    <p id="cloudEmptyState" class="hidden text-center text-sm text-[var(--grey-text)] py-8">目前篩選範圍內沒有足夠的文字資料可以生成文字雲。</p>
   </section>
 
   <section class="mb-12">
@@ -144,6 +176,17 @@ const CATEGORY_META = {
   "Sustainability & ESG":         { label: "永續發展", color: "#6A8B7A" },
   "Marketing & Collaborations":   { label: "行銷聯名", color: "#B67B88" },
 };
+
+const CLOUD_PALETTE = ["#1E1B33", "#8B85BD", "#5F748D", "#6A8B7A", "#B67B88", "#A39CC9"];
+
+const STOPWORDS = new Set([
+  "the","a","an","and","or","but","of","in","on","at","to","for","with","by","from",
+  "is","are","was","were","be","been","being","as","it","its","this","that","these","those",
+  "new","more","than","into","over","after","before","up","down","out","about","amid","amids",
+  "will","says","said","how","why","what","who","new's","2025","2026","via","report","news",
+  "highsnobiety","hypebeast","textile","world","apparel","resources","industry","knitting",
+  "的","與","及","和","了","在","是","為","將","其","也","就","等","這","那","年","月","日"
+]);
 
 let activeCategories = new Set();
 let activeDate = "";
@@ -208,22 +251,21 @@ function renderArticles(list) {
     const chips = a.categories.map(c => {
       const meta = CATEGORY_META[c];
       if (!meta) return "";
-      /* 放大分類標籤為 text-[11px] */
       return `<span class="text-[11px] font-bold uppercase tracking-widest" style="color:${meta.color}">${meta.label}</span>`;
     }).join(`<span class="text-[11px] text-gray-300 mx-2">•</span>`);
 
     card.innerHTML = `
       <div class="mb-4 flex flex-wrap items-center">${chips}</div>
       <p class="eyebrow mb-2 text-gray-500 font-medium">${a.source}  ·  ${a.date}</p>
-      
+
       <h3 class="text-lg leading-snug mb-3 font-bold text-[var(--indigo-dark)] tracking-tight transition-colors group-hover:text-black">
         ${a.title}
       </h3>
-      
+
       <p class="text-sm text-[var(--grey-text)] leading-relaxed line-clamp-3 font-normal flex-grow mb-5">
         ${a.summary || "No description available."}
       </p>
-      
+
       <div class="pt-4 border-t border-gray-100 mt-auto flex justify-between items-center text-xs text-gray-400 uppercase tracking-wider font-medium">
           <span>${a.date}</span>
           <span class="font-bold text-gray-600">${a.source}</span>
@@ -260,6 +302,88 @@ function renderStats(stats, articles) {
   });
 }
 
+/* ---------------------------------------------------------------------
+   文字雲：統計目前篩選範圍內所有文章「標題」的高頻關鍵字
+--------------------------------------------------------------------- */
+function extractKeywords(articles, maxWords = 28) {
+  const freq = new Map();
+
+  const addWord = (w) => {
+    w = w.trim();
+    if (!w) return;
+    const lower = w.toLowerCase();
+    if (STOPWORDS.has(lower)) return;
+    if (/^[a-z]+$/.test(lower) && lower.length < 3) return;
+    if (/^\d+$/.test(w)) return;
+    freq.set(w, (freq.get(w) || 0) + 1);
+  };
+
+  articles.forEach(a => {
+    const text = `${a.title || ""} ${a.summary || ""}`;
+
+    const englishTokens = text.match(/[A-Za-z][A-Za-z'\-]{1,}/g) || [];
+    englishTokens.forEach(addWord);
+
+    const cjkChunks = text.match(/[\u4e00-\u9fa5]{2,}/g) || [];
+    cjkChunks.forEach(chunk => {
+      for (let len = 2; len <= 4 && len <= chunk.length; len++) {
+        for (let i = 0; i + len <= chunk.length; i++) {
+          addWord(chunk.slice(i, i + len));
+        }
+      }
+    });
+  });
+
+  const sorted = Array.from(freq.entries())
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, maxWords * 2);
+
+  const finalWords = [];
+  for (const [word, count] of sorted) {
+    const isSubstringOfExisting = finalWords.some(([w2]) => w2.includes(word) && w2 !== word);
+    if (isSubstringOfExisting) continue;
+    finalWords.push([word, count]);
+    if (finalWords.length >= maxWords) break;
+  }
+
+  return finalWords;
+}
+
+function renderWordCloud(articles) {
+  const container = document.getElementById("wordCloud");
+  const emptyState = document.getElementById("cloudEmptyState");
+  const rangeLabel = document.getElementById("cloudRangeLabel");
+
+  rangeLabel.textContent = activeDate ? activeDate : "ALL DATES";
+
+  const words = extractKeywords(articles);
+  container.innerHTML = "";
+  emptyState.classList.toggle("hidden", words.length > 0);
+  if (words.length === 0) return;
+
+  const maxCount = words[0][1];
+  const minCount = words[words.length - 1][1];
+  const range = Math.max(1, maxCount - minCount);
+
+  const shuffled = [...words].sort(() => Math.random() - 0.5);
+
+  shuffled.forEach(([word, count], idx) => {
+    const ratio = (count - minCount) / range;
+    const fontSize = 0.95 + ratio * 2.6;
+    const opacity = 0.55 + ratio * 0.45;
+    const color = CLOUD_PALETTE[idx % CLOUD_PALETTE.length];
+
+    const span = document.createElement("span");
+    span.className = "cloud-word";
+    span.style.fontSize = `${fontSize}rem`;
+    span.style.color = color;
+    span.style.opacity = opacity;
+    span.title = `出現 ${count} 次`;
+    span.textContent = word;
+    container.appendChild(span);
+  });
+}
+
 async function loadArticles() {
   const params = new URLSearchParams();
   if (activeDate) params.set("date", activeDate);
@@ -274,6 +398,7 @@ async function loadArticles() {
     allArticlesCache = articlesRes.articles;
     renderArticles(allArticlesCache);
     renderStats(statsRes, allArticlesCache);
+    renderWordCloud(allArticlesCache);
   } catch (error) {
     console.error("API Error:", error);
   }
