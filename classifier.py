@@ -111,16 +111,20 @@ def classify_with_rules(title: str, raw_summary: str = "") -> dict:
                 matched.append(cat)
                 matched_terms.append(kw)
                 break
-    matched = list(dict.fromkeys(matched))  # 去重但保留順序
+    
+    # 1. 確保分類不為空
     if not matched:
         matched = ["Corporate & Market"]
+    
+    # 2. 關鍵字保底機制：如果匹配不到，從標題取重點詞，或者給預設值
+    keywords = list(dict.fromkeys(matched_terms))[:3]
+    if not keywords:
+        # 如果沒匹配到任何規則，從標題挑幾個字當關鍵詞（例如：時尚, 紡織, 產業）
+        keywords = ["產業動態", "市場觀察", "時尚趨勢"][:3]
 
-    # 簡單摘要：取前 60 字當作摘要（純離線情境下沒有 LLM 可生成）
+    # 3. 摘要生成
     base_text = raw_summary or title
     summary = base_text[:80] + ("..." if len(base_text) > 80 else "")
-
-    # 離線關鍵詞：用實際匹配到的規則關鍵字當作關鍵詞（去重，最多3個）
-    keywords = list(dict.fromkeys(matched_terms))[:3]
 
     return {"categories": matched, "summary": summary, "keywords": keywords}
 
