@@ -35,12 +35,15 @@ SYSTEM_PROMPT = f"""你是一位時尚與紡織產業的新聞分析師。
 
 {json.dumps(CATEGORY_DESCRIPTIONS, ensure_ascii=False, indent=2)}
 
-請同時產生一句精簡的中文摘要（2-3句話，重點濃縮）。
+請同時完成兩件事：
+1. 產生一句精簡的中文摘要（2-3句話，重點濃縮）。
+2. 抽取 2-3 個最能代表這篇文章核心內容的「中文關鍵詞」，每個關鍵詞需為完整、語意正確的詞組（例如「永續纖維」「聯名合作」「秀場趨勢」），不要切出不完整或無意義的片段，也不要使用單一個中文字。若文章本身是英文，也請將關鍵詞翻譯/轉換成簡潔的中文詞組。
 
 務必只回傳 JSON，格式如下，不要有任何其他文字：
 {{
   "categories": ["Trends & Aesthetics", "Marketing & Collaborations"],
-  "summary": "一句話精簡摘要..."
+  "summary": "一句話精簡摘要...",
+  "keywords": ["聯名合作", "快閃店", "秀場趨勢"]
 }}
 """
 
@@ -71,6 +74,13 @@ def classify_with_llm(title: str, raw_summary: str = "") -> dict:
     data["categories"] = [c for c in data.get("categories", []) if c in CATEGORIES]
     if not data["categories"]:
         data["categories"] = ["Corporate & Market"]  # 預設保底分類
+
+    # 防呆：keywords 確保是 list[str]，且過濾掉空字串/過長異常值
+    raw_keywords = data.get("keywords", [])
+    if not isinstance(raw_keywords, list):
+        raw_keywords = []
+    data["keywords"] = [str(k).strip() for k in raw_keywords if str(k).strip() and len(str(k)) <= 12][:3]
+
     return data
 
 
@@ -94,16 +104,25 @@ KEYWORD_RULES = {
 def classify_with_rules(title: str, raw_summary: str = "") -> dict:
     text = f"{title} {raw_summary}".lower()
     matched = []
+    matched_terms = []
     for cat, keywords in KEYWORD_RULES.items():
-        if any(kw.lower() in text for kw in keywords):
-            matched.append(cat)
+        for kw in keywords:
+            if kw.lower() in text:
+                matched.append(cat)
+                matched_terms.append(kw)
+                break
+    matched = list(dict.fromkeys(matched))  # 去重但保留順序
     if not matched:
         matched = ["Corporate & Market"]
 
     # 簡單摘要：取前 60 字當作摘要（純離線情境下沒有 LLM 可生成）
     base_text = raw_summary or title
     summary = base_text[:80] + ("..." if len(base_text) > 80 else "")
-    return {"categories": matched, "summary": summary}
+
+    # 離線關鍵詞：用實際匹配到的規則關鍵字當作關鍵詞（去重，最多3個）
+    keywords = list(dict.fromkeys(matched_terms))[:3]
+
+    return {"categories": matched, "summary": summary, "keywords": keywords}
 
 
 def classify_article(title: str, raw_summary: str = "") -> dict:
