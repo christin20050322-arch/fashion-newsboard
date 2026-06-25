@@ -1,0 +1,303 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>FASHION NEWSBOARD | Intelligence Portal</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,700&family=Playfair+Display:ital,wght@0,500;0,600;1,500&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --paper: #F3F3F6;         
+    --cream-card: #FFFFFF;    
+    --indigo-dark: #1E1B33;   
+    --lavender-light: #ECEBF3;
+    --accent-purple: #8B85BD; 
+    --grey-text: #6B6880;     
+  }
+  
+  body { 
+    font-family: 'DM Sans', sans-serif; 
+    background-color: var(--paper); 
+    color: var(--indigo-dark); 
+    letter-spacing: -0.01em;
+  }
+
+  .font-serif { font-family: 'Playfair Display', serif; }
+  
+  .soft-card {
+    background-color: var(--cream-card);
+    border-radius: 1.75rem; 
+    border: 1px solid rgba(225, 223, 235, 0.6);
+    box-shadow: 0 4px 20px -2px rgba(30, 27, 51, 0.02);
+  }
+
+  .masthead { 
+    font-family: 'DM Sans', sans-serif;
+    font-weight: 500;
+    letter-spacing: -0.04em;
+    color: var(--indigo-dark);
+  }
+
+  /* 放大了按鈕的基礎字級與 padding */
+  .cat-chip {
+    font-size: 0.85rem; padding: 8px 22px; font-weight: 500; letter-spacing: 0.03em;
+    white-space: nowrap; transition: all .15s ease;
+    border-radius: 9999px; 
+    border: 1px solid var(--lavender-light);
+    background: var(--cream-card);
+    color: var(--grey-text);
+  }
+  .cat-chip:hover {
+    border-color: var(--accent-purple);
+    color: var(--indigo-dark);
+    transform: translateY(-1px);
+  }
+
+  .article-card {
+    background: var(--cream-card);
+    border-radius: 1.5rem;
+    border: 1px solid rgba(225, 223, 235, 0.5);
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  }
+  .article-card:hover {
+    border-color: transparent;
+    box-shadow: 0 12px 30px -4px rgba(30, 27, 51, 0.06);
+    transform: translateY(-3px);
+  }
+
+  /* 放大標籤字體 */
+  .eyebrow { font-size: 0.75rem; letter-spacing: 0.1em; text-transform: uppercase; color: var(--accent-purple); font-weight: 600; }
+</style>
+</head>
+<body class="min-h-screen pb-24 relative">
+
+<div class="bg-white border-b border-[#E3E1EC] sticky top-0 z-50">
+  <div class="max-w-7xl mx-auto px-6 md:px-12 py-3 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 text-sm">
+    <div class="flex items-center gap-4">
+      <span class="eyebrow text-gray-400">ARCHIVE DATE</span>
+      <input type="date" id="dateFilter" class="bg-transparent border border-gray-200 rounded-lg px-3 py-1.5 text-gray-700 text-sm focus:outline-none focus:border-purple-400 transition-colors" />
+      <button id="clearDate" class="text-gray-500 underline hover:text-purple-600 transition-colors">ALL DATES</button>
+    </div>
+    <div id="todayLabel" class="text-gray-500 font-medium tracking-wide text-xs"></div>
+  </div>
+</div>
+
+<header class="relative overflow-hidden py-16 bg-white border-b border-[#E3E1EC]">
+  <div class="max-w-7xl mx-auto px-6 md:px-12 text-center relative z-10">
+    <p class="eyebrow mb-4 text-[#718096]">Curated Intelligence matrix · FORECAST LAB</p>
+    <h1 class="masthead text-5xl md:text-6xl font-medium tracking-tight">Fashion Newsboard</h1>
+    <p class="font-serif italic text-base md:text-lg text-gray-500 tracking-widest mt-3">Where Fashion Insights Grow</p>
+  </div>
+</header>
+
+<main class="max-w-7xl mx-auto px-6 md:px-12 py-12">
+
+  <section class="soft-card grid grid-cols-1 md:grid-cols-12 gap-8 items-center p-6 md:p-8 mb-16 relative overflow-hidden bg-white">
+    
+    <div class="md:col-span-3 flex flex-col items-center justify-center text-center border-b md:border-b-0 md:border-r border-[#ECEBF3] pb-6 md:pb-0 md:pr-6 h-full">
+      <p class="eyebrow mb-3">Total Briefs</p>
+      <p class="font-display text-6xl md:text-7xl font-black leading-none text-[var(--indigo-dark)] tracking-tighter" id="totalCount">0</p>
+      <span class="text-xs uppercase tracking-[0.2em] text-[#718096] mt-4 font-medium">Filtered Today</span>
+    </div>
+
+    <div class="md:col-span-3 flex items-center justify-center border-b md:border-b-0 md:border-r border-[#ECEBF3] pb-6 md:pb-0 md:px-4">
+      <div class="w-28 h-28 md:w-32 md:h-32 relative">
+        <canvas id="catDonut"></canvas>
+      </div>
+    </div>
+
+    <div class="md:col-span-6 md:pl-6">
+      <p class="eyebrow mb-5 text-gray-400 tracking-[0.2em]">Category Index</p>
+      <ul class="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-4 text-sm" id="catLegend">
+        </ul>
+    </div>
+  </section>
+
+  <section class="mb-12">
+    <div class="flex items-center gap-2 mb-6 border-b border-[#ECEBF3] pb-3">
+      <span class="font-display text-sm font-bold uppercase tracking-widest text-[#2D3748]">FILTER SPECTRUM</span>
+      <button id="clearCategories" class="hidden text-sm text-[var(--accent-purple)] hover:text-purple-700 underline ml-auto font-medium transition-colors">清除篩選</button>
+    </div>
+    <div id="categoryFilters" class="flex flex-wrap gap-3"></div>
+  </section>
+
+  <p id="filterStatus" class="text-sm uppercase tracking-wider mb-8 font-semibold"></p>
+
+  <section id="articleGrid" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-x-8 gap-y-10"></section>
+  <p id="emptyState" class="hidden text-center text-base text-[var(--grey-text)] py-32 font-display italic">目前篩選條件下沒有符合的文章。</p>
+</main>
+
+<footer class="mt-24 border-t border-[#ECEBF3] py-12 text-center text-xs uppercase tracking-[0.3em] text-[#6B6880]">
+  THE CURATED LABS © 2026 · ALL RIGHTS RESERVED
+</footer>
+
+<script>
+const API = "http://127.0.0.1:8000";
+
+const CATEGORY_META = {
+  "Corporate & Market":           { label: "商業動態", color: "#1E1B33" },
+  "Trends & Aesthetics":          { label: "流行美學", color: "#8B85BD" },
+  "Supply Chain & Textile Tech":  { label: "紡織技術", color: "#5F748D" },
+  "Sustainability & ESG":         { label: "永續發展", color: "#6A8B7A" },
+  "Marketing & Collaborations":   { label: "行銷聯名", color: "#B67B88" },
+};
+
+let activeCategories = new Set();
+let activeDate = "";
+let donutChart = null;
+let allArticlesCache = [];
+
+document.getElementById("todayLabel").textContent =
+  new Date().toLocaleDateString("zh-TW", { year: "numeric", month: "long", day: "numeric", weekday: "short" });
+
+function chipStyle(key, active) {
+  const meta = CATEGORY_META[key];
+  if (active) {
+    return `background:#1E1B33; color:#fff; border-color:#1E1B33; font-weight: 600; box-shadow: 0 4px 12px rgba(30, 27, 51, 0.15);`;
+  }
+  return `background:#FFFFFF; color:#6B6880; border-color:#ECEBF3;`;
+}
+
+function buildCategoryFilterChips() {
+  const wrap = document.getElementById("categoryFilters");
+  wrap.innerHTML = "";
+  Object.entries(CATEGORY_META).forEach(([key, meta]) => {
+    const active = activeCategories.has(key);
+    const btn = document.createElement("button");
+    btn.className = `cat-chip ${active ? "is-active" : ""}`;
+    btn.style = chipStyle(key, active);
+    btn.textContent = (active ? "✓ " : "") + meta.label;
+    btn.onclick = () => {
+      activeCategories.has(key) ? activeCategories.delete(key) : activeCategories.add(key);
+      buildCategoryFilterChips();
+      updateFilterStatus();
+      loadArticles();
+    };
+    wrap.appendChild(btn);
+  });
+  document.getElementById("clearCategories").classList.toggle("hidden", activeCategories.size === 0);
+}
+
+function updateFilterStatus() {
+  const statusEl = document.getElementById("filterStatus");
+  if (activeCategories.size === 0) {
+    statusEl.textContent = "目前顯示：ALL SPECTRUM / 全部分類";
+    statusEl.style.color = "var(--grey-text)";
+  } else {
+    const labels = Array.from(activeCategories).map(k => CATEGORY_META[k]?.label).join(" 、 ");
+    statusEl.textContent = `目前篩選：${labels}`;
+    statusEl.style.color = "var(--accent-purple)";
+  }
+}
+
+function renderArticles(list) {
+  const grid = document.getElementById("articleGrid");
+  const empty = document.getElementById("emptyState");
+  grid.innerHTML = "";
+  empty.classList.toggle("hidden", list.length > 0);
+
+  list.forEach(a => {
+    const card = document.createElement("a");
+    card.href = a.url;
+    card.target = "_blank";
+    card.className = "article-card block p-7 flex flex-col h-full";
+
+    const chips = a.categories.map(c => {
+      const meta = CATEGORY_META[c];
+      if (!meta) return "";
+      /* 放大分類標籤為 text-[11px] */
+      return `<span class="text-[11px] font-bold uppercase tracking-widest" style="color:${meta.color}">${meta.label}</span>`;
+    }).join(`<span class="text-[11px] text-gray-300 mx-2">•</span>`);
+
+    card.innerHTML = `
+      <div class="mb-4 flex flex-wrap items-center">${chips}</div>
+      <p class="eyebrow mb-2 text-gray-500 font-medium">${a.source}  ·  ${a.date}</p>
+      
+      <h3 class="text-lg leading-snug mb-3 font-bold text-[var(--indigo-dark)] tracking-tight transition-colors group-hover:text-black">
+        ${a.title}
+      </h3>
+      
+      <p class="text-sm text-[var(--grey-text)] leading-relaxed line-clamp-3 font-normal flex-grow mb-5">
+        ${a.summary || "No description available."}
+      </p>
+      
+      <div class="pt-4 border-t border-gray-100 mt-auto flex justify-between items-center text-xs text-gray-400 uppercase tracking-wider font-medium">
+          <span>${a.date}</span>
+          <span class="font-bold text-gray-600">${a.source}</span>
+      </div>
+    `;
+    grid.appendChild(card);
+  });
+}
+
+function renderStats(stats, articles) {
+  document.getElementById("totalCount").textContent = stats.total;
+
+  const keys = Object.keys(stats.by_category);
+  const data = keys.map(k => stats.by_category[k]);
+  const colors = keys.map(k => CATEGORY_META[k]?.color || "#999");
+
+  const legend = document.getElementById("catLegend");
+  legend.innerHTML = keys.map((k, i) => `
+    <li class="border-b border-gray-50 pb-3 last:border-0 last:pb-0">
+      <div class="flex items-center justify-between gap-3">
+        <div class="flex items-center gap-2">
+          <span class="w-2 h-2 inline-block shrink-0 rounded-full" style="background:${colors[i]}"></span>
+          <span class="font-bold text-[var(--indigo-dark)] text-base">${CATEGORY_META[k]?.label || k}</span>
+        </div>
+        <span class="font-bold text-gray-500 text-xs">${stats.by_category[k]} 篇</span>
+      </div>
+    </li>`).join("");
+
+  if (donutChart) donutChart.destroy();
+  donutChart = new Chart(document.getElementById("catDonut"), {
+    type: "doughnut",
+    data: { labels: keys.map(k => CATEGORY_META[k]?.label || k), datasets: [{ data, backgroundColor: colors, borderWidth: 2, borderColor: "#ffffff" }] },
+    options: { plugins: { legend: { display: false } }, cutout: '76%', responsive: true, maintainAspectRatio: false }
+  });
+}
+
+async function loadArticles() {
+  const params = new URLSearchParams();
+  if (activeDate) params.set("date", activeDate);
+  if (activeCategories.size) params.set("categories", Array.from(activeCategories).join(","));
+
+  try {
+    const [articlesRes, statsRes] = await Promise.all([
+      fetch(`${API}/api/articles?${params.toString()}`).then(r => r.json()),
+      fetch(`${API}/api/stats?${activeDate ? "date=" + activeDate : ""}`).then(r => r.json()),
+    ]);
+
+    allArticlesCache = articlesRes.articles;
+    renderArticles(allArticlesCache);
+    renderStats(statsRes, allArticlesCache);
+  } catch (error) {
+    console.error("API Error:", error);
+  }
+}
+
+document.getElementById("dateFilter").addEventListener("change", e => {
+  activeDate = e.target.value;
+  loadArticles();
+});
+document.getElementById("clearDate").addEventListener("click", () => {
+  activeDate = "";
+  document.getElementById("dateFilter").value = "";
+  loadArticles();
+});
+document.getElementById("clearCategories").addEventListener("click", () => {
+  activeCategories.clear();
+  buildCategoryFilterChips();
+  updateFilterStatus();
+  loadArticles();
+});
+
+buildCategoryFilterChips();
+updateFilterStatus();
+loadArticles();
+</script>
+</body>
+</html>
