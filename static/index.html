@@ -71,15 +71,13 @@
 
   /* ---- 文字雲樣式 ---- */
   #wordCloud {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: center;
-    justify-content: center;
-    gap: 0.5rem 1rem;
-    min-height: 140px;
-    padding: 1rem 0.5rem;
+    position: relative;
+    width: 100%;
+    height: 320px;
+    overflow: hidden;
   }
   .cloud-word {
+    position: absolute;
     font-family: 'Playfair Display', serif;
     font-weight: 600;
     line-height: 1;
@@ -87,10 +85,12 @@
     cursor: default;
     transition: transform .15s ease, opacity .15s ease;
     opacity: 0.92;
+    transform: translate(-50%, -50%);
   }
   .cloud-word:hover {
-    transform: scale(1.08);
+    transform: translate(-50%, -50%) scale(1.12);
     opacity: 1;
+    z-index: 10;
   }
 </style>
 </head>
@@ -145,7 +145,7 @@
       <span class="text-xs text-gray-400" id="cloudRangeLabel"></span>
     </div>
     <div id="wordCloud"></div>
-    <p id="cloudEmptyState" class="hidden text-center text-sm text-[var(--grey-text)] py-8">目前篩選範圍內沒有足夠的文字資料可以生成文字雲。</p>
+    <p id="cloudEmptyState" class="hidden text-center text-sm text-[var(--grey-text)] py-8">目前篩選範圍內沒有 AI 關鍵詞資料（可能是舊資料尚未產生 keywords，重新執行一次抓取即可補上）。</p>
   </section>
 
   <section class="mb-12">
@@ -303,50 +303,28 @@ function renderStats(stats, articles) {
 }
 
 /* ---------------------------------------------------------------------
-   文字雲：統計目前篩選範圍內所有文章「標題」的高頻關鍵字
+   文字雲：統計目前篩選範圍內所有文章「AI 抽取關鍵詞 (keywords)」的出現頻率
+   keywords 欄位是後端分類時由 LLM（或離線規則備援）產生的語意正確詞組，
+   不再用前端字串切割猜測，避免出現「電纖維」「動品」之類不通順的片段。
 --------------------------------------------------------------------- */
 function extractKeywords(articles, maxWords = 28) {
   const freq = new Map();
 
-  const addWord = (w) => {
-    w = w.trim();
-    if (!w) return;
-    const lower = w.toLowerCase();
-    if (STOPWORDS.has(lower)) return;
-    if (/^[a-z]+$/.test(lower) && lower.length < 3) return;
-    if (/^\d+$/.test(w)) return;
-    freq.set(w, (freq.get(w) || 0) + 1);
-  };
-
   articles.forEach(a => {
-    const text = `${a.title || ""} ${a.summary || ""}`;
-
-    const englishTokens = text.match(/[A-Za-z][A-Za-z'\-]{1,}/g) || [];
-    englishTokens.forEach(addWord);
-
-    const cjkChunks = text.match(/[\u4e00-\u9fa5]{2,}/g) || [];
-    cjkChunks.forEach(chunk => {
-      for (let len = 2; len <= 4 && len <= chunk.length; len++) {
-        for (let i = 0; i + len <= chunk.length; i++) {
-          addWord(chunk.slice(i, i + len));
-        }
-      }
+    const kws = a.keywords || [];
+    kws.forEach(raw => {
+      const word = (raw || "").trim();
+      if (!word) return;
+      if (STOPWORDS.has(word.toLowerCase())) return;
+      freq.set(word, (freq.get(word) || 0) + 1);
     });
   });
 
   const sorted = Array.from(freq.entries())
     .sort((a, b) => b[1] - a[1])
-    .slice(0, maxWords * 2);
+    .slice(0, maxWords);
 
-  const finalWords = [];
-  for (const [word, count] of sorted) {
-    const isSubstringOfExisting = finalWords.some(([w2]) => w2.includes(word) && w2 !== word);
-    if (isSubstringOfExisting) continue;
-    finalWords.push([word, count]);
-    if (finalWords.length >= maxWords) break;
-  }
-
-  return finalWords;
+  return sorted;
 }
 
 function renderWordCloud(articles) {
@@ -365,11 +343,59 @@ function renderWordCloud(articles) {
   const minCount = words[words.length - 1][1];
   const range = Math.max(1, maxCount - minCount);
 
-  const shuffled = [...words].sort(() => Math.random() - 0.5);
+  // 容器尺寸（CSS 已固定 height: 320px，寬度跟著父層撐滿）
+  const cw = container.clientWidth || 800;
+  const ch = container.clientHeight || 320;
+  const centerX = cw / 2;
+  const centerY = ch / 2;
 
-  shuffled.forEach(([word, count], idx) => {
+  // 字頻越高的詞先放（會優先佔據中心位置），較不重要的詞往外散
+  const sortedByFreq = [...words].sort((a, b) => b[1] - a[1]);
+
+  const placedBoxes = []; // 已放置文字的邊界框，用來檢查碰撞
+
+  function rectsOverlap(a, b) {
+    return !(a.right < b.left || a.left > b.right || a.bottom < b.top || a.top > b.bottom);
+  }
+
+  // 螺旋式試位：從中心開始沿螺旋線往外找一個不會跟現有文字重疊的位置
+  function findSpiralPosition(width, height) {
+    const padding = 6; // 文字之間的最小間距
+    let angle = Math.random() * Math.PI * 2; // 每個詞起始角度隨機，畫面更自然
+    let radius = 0;
+    const angleStep = 0.35;
+    const radiusStep = 4;
+
+    for (let i = 0; i < 600; i++) {
+      const x = centerX + radius * Math.cos(angle);
+      const y = centerY + radius * Math.sin(angle) * 0.7; // y 方向壓縮一點，貼合扁寬的卡片形狀
+
+      const box = {
+        left: x - width / 2 - padding,
+        right: x + width / 2 + padding,
+        top: y - height / 2 - padding,
+        bottom: y + height / 2 + padding,
+      };
+
+      const inBounds = box.left >= 0 && box.right <= cw && box.top >= 0 && box.bottom <= ch;
+      const collides = placedBoxes.some(b => rectsOverlap(box, b));
+
+      if (inBounds && !collides) {
+        return { x, y, box };
+      }
+
+      angle += angleStep;
+      radius += radiusStep * (angleStep / (Math.PI * 2));
+    }
+    // 找不到完全不重疊的位置時，就直接放在目前算出的座標（極少數極端擁擠情況才會發生）
+    const fallbackX = Math.min(Math.max(width / 2, centerX + radius * Math.cos(angle)), cw - width / 2);
+    const fallbackY = Math.min(Math.max(height / 2, centerY + radius * Math.sin(angle) * 0.7), ch - height / 2);
+    return { x: fallbackX, y: fallbackY, box: { left: fallbackX - width / 2, right: fallbackX + width / 2, top: fallbackY - height / 2, bottom: fallbackY + height / 2 } };
+  }
+
+  sortedByFreq.forEach(([word, count], idx) => {
     const ratio = (count - minCount) / range;
-    const fontSize = 0.95 + ratio * 2.6;
+    const fontSize = 0.95 + ratio * 2.6; // rem
     const opacity = 0.55 + ratio * 0.45;
     const color = CLOUD_PALETTE[idx % CLOUD_PALETTE.length];
 
@@ -380,7 +406,22 @@ function renderWordCloud(articles) {
     span.style.opacity = opacity;
     span.title = `出現 ${count} 次`;
     span.textContent = word;
+
+    // 先放進畫面才能量到實際寬高（visibility hidden 避免閃爍）
+    span.style.visibility = "hidden";
     container.appendChild(span);
+    const width = span.offsetWidth;
+    const height = span.offsetHeight;
+
+    const { x, y, box } = findSpiralPosition(width, height);
+    placedBoxes.push(box);
+
+    span.style.left = `${x}px`;
+    span.style.top = `${y}px`;
+    // 輕微隨機旋轉角度，讓排列更像手感文字雲（不會每個字都正正方方）
+    const rotate = (Math.random() - 0.5) * 12;
+    span.style.transform = `translate(-50%, -50%) rotate(${rotate}deg)`;
+    span.style.visibility = "visible";
   });
 }
 
