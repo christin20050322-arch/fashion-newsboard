@@ -78,8 +78,14 @@ def create_article(item: ArticleIn):
         url=item.url,
         summary=result["summary"],
         categories=result["categories"],
+        keywords=result.get("keywords", []),
     )
-    return {"inserted": inserted, "categories": result["categories"], "summary": result["summary"]}
+    return {
+        "inserted": inserted,
+        "categories": result["categories"],
+        "summary": result["summary"],
+        "keywords": result.get("keywords", []),
+    }
 
 
 # ----- 前端靜態檔案 -----
