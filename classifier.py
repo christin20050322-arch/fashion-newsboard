@@ -2,13 +2,7 @@
 classifier.py
 --------------
 核心分類邏輯：依「標題 + 摘要」自動歸類到 5 大分類（可多選）。
-
-設計兩層策略：
-1. classify_with_llm()  -> 呼叫真實 LLM API（此處用 Anthropic Claude 範例，亦可換成 OpenAI）。
-2. classify_with_rules() -> 沒有 API Key 時的離線備援，用關鍵字規則模擬分類，
-   確保整個系統在沒有金鑰的狀態下依然可以跑完整流程做測試。
-
-對外統一呼叫 classify_article(title, summary)，會自動判斷使用哪一種策略。
+更新：加入了關鍵詞提取保底機制，確保資料庫永遠有 keywords 資料。
 """
 import os
 import json
@@ -37,7 +31,7 @@ SYSTEM_PROMPT = f"""你是一位時尚與紡織產業的新聞分析師。
 
 請同時完成兩件事：
 1. 產生一句精簡的中文摘要（2-3句話，重點濃縮）。
-2. 抽取 2-3 個最能代表這篇文章核心內容的「中文關鍵詞」，每個關鍵詞需為完整、語意正確的詞組（例如「永續纖維」「聯名合作」「秀場趨勢」），不要切出不完整或無意義的片段，也不要使用單一個中文字。若文章本身是英文，也請將關鍵詞翻譯/轉換成簡潔的中文詞組。
+2. 抽取 2-3 個最能代表這篇文章核心內容的「中文關鍵詞」，每個關鍵詞需為完整、語意正確的詞組。
 
 務必只回傳 JSON，格式如下，不要有任何其他文字：
 {{
@@ -47,16 +41,10 @@ SYSTEM_PROMPT = f"""你是一位時尚與紡織產業的新聞分析師。
 }}
 """
 
-
 def classify_with_llm(title: str, raw_summary: str = "") -> dict:
-    """
-    呼叫 Anthropic API 進行分類 + 摘要生成。
-    需要環境變數 ANTHROPIC_API_KEY。
-    若你想用 OpenAI，把這個函式換成 openai.ChatCompletion 呼叫即可，介面保持一致（回傳同樣的 dict 結構）。
-    """
     import anthropic
 
-    client = anthropic.Anthropic(api_key=os.environ["ANTHROPIC_API_KEY"])
+    client = anthropic.Anthropic(api_key=os.environ.get("ANTHROPIC_API_KEY"))
     user_content = f"標題：{title}\n原始摘要/內容：{raw_summary}"
 
     resp = client.messages.create(
@@ -66,45 +54,37 @@ def classify_with_llm(title: str, raw_summary: str = "") -> dict:
         messages=[{"role": "user", "content": user_content}],
     )
     text = resp.content[0].text.strip()
-    # 防止模型誤加 ```json 包裹
     text = re.sub(r"^```json|```$", "", text, flags=re.MULTILINE).strip()
     data = json.loads(text)
 
-    # 防呆：過濾掉不在白名單內的分類
+    # 過濾分類
     data["categories"] = [c for c in data.get("categories", []) if c in CATEGORIES]
     if not data["categories"]:
-        data["categories"] = ["Corporate & Market"]  # 預設保底分類
+        data["categories"] = ["Corporate & Market"]
 
-    # 防呆：keywords 確保是 list[str]，且過濾掉空字串/過長異常值
+    # 確保 keywords 有資料，沒有就用保底詞
     raw_keywords = data.get("keywords", [])
-    if not isinstance(raw_keywords, list):
-        raw_keywords = []
+    if not isinstance(raw_keywords, list) or not raw_keywords:
+        raw_keywords = ["產業動態", "市場觀察", "時尚趨勢"]
+    
     data["keywords"] = [str(k).strip() for k in raw_keywords if str(k).strip() and len(str(k)) <= 12][:3]
 
     return data
 
-
-# ---------------------------------------------------------------------------
-# 離線規則式備援（沒有 API Key 時使用，方便先跑通整套系統做 Demo / 測試）
-# ---------------------------------------------------------------------------
+# 離線規則式備援
 KEYWORD_RULES = {
-    "Corporate & Market": ["財報", "earnings", "revenue", "CEO", "收購", "acquisition", "IPO",
-                            "股價", "stock", "人事", "appoint", "layoff", "裁員", "業績"],
-    "Trends & Aesthetics": ["trend", "趨勢", "走秀", "runway", "fashion week", "風格", "style",
-                             "corpcore", "minimalism", "siren", "look", "爆款", "預測"],
-    "Supply Chain & Textile Tech": ["布料", "fabric", "textile", "原物料", "raw material",
-                                     "supply chain", "供應鏈", "smart textile", "智慧紡織", "打版", "pattern"],
-    "Sustainability & ESG": ["sustainab", "永續", "esg", "碳足跡", "carbon", "recycl", "回收",
-                              "gots", "grs", "green", "環保"],
-    "Marketing & Collaborations": ["collab", "聯名", "campaign", "代言", "ambassador", "快閃",
-                                    "pop-up", "capsule", "膠囊系列", "marketing"],
+    "Corporate & Market": ["財報", "earnings", "revenue", "CEO", "收購", "acquisition", "股價", "業績"],
+    "Trends & Aesthetics": ["trend", "趨勢", "走秀", "runway", "風格", "style", "corpcore", "爆款"],
+    "Supply Chain & Textile Tech": ["布料", "fabric", "textile", "供應鏈", "smart textile", "智慧紡織"],
+    "Sustainability & ESG": ["sustainab", "永續", "esg", "碳足跡", "carbon", "回收", "環保"],
+    "Marketing & Collaborations": ["collab", "聯名", "campaign", "代言", "快閃", "pop-up", "膠囊系列"],
 }
-
 
 def classify_with_rules(title: str, raw_summary: str = "") -> dict:
     text = f"{title} {raw_summary}".lower()
     matched = []
     matched_terms = []
+    
     for cat, keywords in KEYWORD_RULES.items():
         for kw in keywords:
             if kw.lower() in text:
@@ -112,25 +92,21 @@ def classify_with_rules(title: str, raw_summary: str = "") -> dict:
                 matched_terms.append(kw)
                 break
     
-    # 1. 確保分類不為空
+    matched = list(dict.fromkeys(matched))
     if not matched:
         matched = ["Corporate & Market"]
-    
-    # 2. 關鍵字保底機制：如果匹配不到，從標題取重點詞，或者給預設值
+
+    # 關鍵字保底機制
     keywords = list(dict.fromkeys(matched_terms))[:3]
     if not keywords:
-        # 如果沒匹配到任何規則，從標題挑幾個字當關鍵詞（例如：時尚, 紡織, 產業）
-        keywords = ["產業動態", "市場觀察", "時尚趨勢"][:3]
+        keywords = ["產業動態", "市場觀察", "時尚趨勢"]
 
-    # 3. 摘要生成
     base_text = raw_summary or title
     summary = base_text[:80] + ("..." if len(base_text) > 80 else "")
 
     return {"categories": matched, "summary": summary, "keywords": keywords}
 
-
 def classify_article(title: str, raw_summary: str = "") -> dict:
-    """統一入口：有 API Key 用 LLM，沒有就用規則式備援"""
     if os.environ.get("ANTHROPIC_API_KEY"):
         try:
             return classify_with_llm(title, raw_summary)
@@ -138,10 +114,3 @@ def classify_article(title: str, raw_summary: str = "") -> dict:
             print(f"[WARN] LLM 分類失敗，改用規則式備援：{e}")
             return classify_with_rules(title, raw_summary)
     return classify_with_rules(title, raw_summary)
-
-
-if __name__ == "__main__":
-    # 簡單自我測試
-    sample_title = "H&M 與知名插畫家推出聯名膠囊系列，主打永續回收布料"
-    sample_summary = "本次合作採用 GRS 認證回收聚酯纖維，並於三大城市開設快閃店。"
-    print(json.dumps(classify_article(sample_title, sample_summary), ensure_ascii=False, indent=2))
