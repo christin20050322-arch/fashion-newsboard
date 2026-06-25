@@ -1,16 +1,9 @@
-"""
-seed_demo.py
--------------
-快速塞入幾筆範例新聞，方便你不用等 RSS 抓取就能先看到前端畫面效果。
-用法：先啟動 app.py，再執行這個腳本。
-    python seed_demo.py
-"""
-import requests
 import datetime
+from database import insert_article, init_db
+from classifier import classify_article
 
-API = "http://127.0.0.1:8000"
+# 範例資料 (維持原樣)
 today = datetime.date.today().isoformat()
-
 SAMPLES = [
     dict(source="Business of Fashion", title="LVMH 第二季營收優於預期，皮革製品部門強勁回升",
          url="https://example.com/lvmh-q2-earnings",
@@ -32,7 +25,26 @@ SAMPLES = [
          raw_summary="一項導電纖維技術可直接編織入衣物用於監測心率，該技術已進入量產前測試階段，預計明年導入運動服飾品牌供應鏈。"),
 ]
 
-for item in SAMPLES:
-    item["date"] = today
-    resp = requests.post(f"{API}/api/articles", json=item)
-    print(item["title"][:30], "->", resp.json())
+def run_seed():
+    print("正在將範例資料寫入資料庫...")
+    # 確保資料庫初始化
+    init_db()
+    
+    for item in SAMPLES:
+        # 1. 呼叫 AI 分類器處理摘要與關鍵詞
+        result = classify_article(item["title"], item["raw_summary"])
+        
+        # 2. 直接呼叫資料庫函式寫入
+        inserted = insert_article(
+            date=today,
+            source=item["source"],
+            title=item["title"],
+            url=item["url"],
+            summary=result["summary"],
+            categories=result["categories"],
+            keywords=result.get("keywords", []),
+        )
+        print(f"成功處理: {item['title'][:20]}... -> 結果: {inserted}")
+
+if __name__ == "__main__":
+    run_seed()
