@@ -1,0 +1,10 @@
+# Python 編譯快取
+__pycache__/
+*.pyc
+
+# 資料庫檔案（不應上傳到版控，每個環境各自產生自己的資料）
+*.db
+fashion_news.db
+
+# 環境變數（如果你之後用 .env 檔案放 API Key）
+.env
