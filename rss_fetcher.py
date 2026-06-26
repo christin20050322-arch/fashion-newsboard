@@ -44,8 +44,8 @@ RSS_FEEDS = {
     "Apparel Resources (Google News)":   "https://news.google.com/rss/search?q=site:apparelresources.com&hl=en-US&gl=US",
     "Knitting Industry (Google News)":   "https://news.google.com/rss/search?q=site:knittingindustry.com&hl=en-US&gl=US",
     "CTNET 中國紡織服裝服飾網 (Google News)": "https://news.google.com/rss/search?q=site:ctnet.com.cn&hl=zh-TW&gl=TW",
-    "華衣網 (Google News)":               "https://news.google.com/rss/search?q=site:efu.com.cn&hl=zh-TW&gl=TW",
-    "Tnet 全球紡織資訊網 (Google News)":   "https://news.google.com/rss/search?q=site:textiletoday.com.tw&hl=zh-TW&gl=TW",
+    "華衣網 (Google News)":               "https://news.google.com/rss/search?q=site:ef360.com&hl=zh-TW&gl=TW",
+    "Tnet 全球紡織資訊網 (Google News)":   "https://news.google.com/rss/search?q=site:tnet.org.tw&hl=zh-TW&gl=TW",
 
     # 提示：上面 Google News 變通方案不保證每個站點都能搜到結果，
     # 如果某一個來源一直抓不到文章，可以把該行刪除或註解掉（在行首加 # ）即可，不影響其他來源運作。
