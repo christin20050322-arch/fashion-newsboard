@@ -100,20 +100,28 @@ def query_articles(date_filter=None):
     return results
 
 def get_stats():
-    """統計各分類文章數量"""
+    """統計各分類文章數量 (修正多分類儲存問題)"""
     conn = get_connection()
     cur = conn.cursor()
-    # 這裡確保 SQL 可以正確統計
-    cur.execute("SELECT categories, COUNT(*) as count FROM articles GROUP BY categories")
+    
+    # 查詢所有分類欄位
+    cur.execute("SELECT categories FROM articles")
     rows = cur.fetchall()
     
-    # 轉換成 app.py 需要的格式
     stats = {}
     for row in rows:
-        # row 在 RealDictCursor 裡是 dict，在 SQLite Row 裡是物件，用 dict() 轉型最安全
+        # 將 row 轉為 dict，並取出分類字串
         r = dict(row)
-        stats[r['categories']] = r['count']
-        
+        cat_field = r.get('categories', '')
+        if not cat_field:
+            continue
+            
+        # 將逗號分隔的字串拆解成列表，並逐一統計
+        categories = cat_field.split(',')
+        for cat in categories:
+            cat = cat.strip()
+            stats[cat] = stats.get(cat, 0) + 1
+            
     cur.close()
     conn.close()
     return stats
