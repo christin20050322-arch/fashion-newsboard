@@ -1,117 +1,85 @@
-"""
-database.py
-------------
-SQLite 資料庫初始化與基本存取函式。
-"""
+import os
 import sqlite3
-from contextlib import contextmanager
+import psycopg2
+from psycopg2.extras import RealDictCursor
 
-DB_PATH = "fashion_news.db"
+# 獲取環境變數 (Railway 會自動提供 DATABASE_URL)
+DB_URL = os.environ.get("DATABASE_URL")
 
-SCHEMA = """
-CREATE TABLE IF NOT EXISTS articles (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    date TEXT NOT NULL,            -- 文章發布日期 YYYY-MM-DD
-    source TEXT NOT NULL,          -- 媒體名稱
-    title TEXT NOT NULL,
-    url TEXT NOT NULL UNIQUE,      -- 用 URL 避免重複抓取
-    summary TEXT,                  -- AI 核心摘要
-    categories TEXT,               -- 以逗號分隔儲存多分類，例如 "Trends,Sustainability"
-    keywords TEXT,                 -- AI 抽取的關鍵詞，逗號分隔，例如 "永續纖維,聯名,快閃店"
-    created_at TEXT DEFAULT (datetime('now'))
-);
-"""
-
-
-def _migrate_add_keywords_column(conn):
-    """相容舊資料庫：如果是用舊版本 schema 建立的 db（沒有 keywords 欄位），自動補上"""
-    cols = [row[1] for row in conn.execute("PRAGMA table_info(articles)").fetchall()]
-    if "keywords" not in cols:
-        conn.execute("ALTER TABLE articles ADD COLUMN keywords TEXT")
-
-
-@contextmanager
-def get_conn():
-    conn = sqlite3.connect(DB_PATH)
-    conn.row_factory = sqlite3.Row
-    try:
-        yield conn
-        conn.commit()
-    finally:
-        conn.close()
-
+def get_connection():
+    """自動判斷模式：若有 DB_URL 則連 PostgreSQL，否則用 SQLite"""
+    if DB_URL:
+        # PostgreSQL 模式 (Railway)
+        return psycopg2.connect(DB_URL, cursor_factory=RealDictCursor)
+    else:
+        # SQLite 模式 (本地)
+        conn = sqlite3.connect("fashion_news.db")
+        conn.row_factory = sqlite3.Row
+        return conn
 
 def init_db():
-    with get_conn() as conn:
-        conn.execute(SCHEMA)
-        _migrate_add_keywords_column(conn)
+    """初始化資料庫表結構"""
+    conn = get_connection()
+    cur = conn.cursor()
+    
+    # 使用通用 SQL 語法
+    create_table_sql = """
+    CREATE TABLE IF NOT EXISTS articles (
+        id SERIAL PRIMARY KEY,
+        date TEXT,
+        source TEXT,
+        title TEXT UNIQUE,
+        url TEXT,
+        summary TEXT,
+        categories TEXT,
+        keywords TEXT
+    );
+    """
+    # 針對 SQLite 調整 (SQLite 不支援 SERIAL，需用 INTEGER PRIMARY KEY)
+    if not DB_URL:
+        create_table_sql = create_table_sql.replace("SERIAL PRIMARY KEY", "INTEGER PRIMARY KEY AUTOINCREMENT")
+    
+    cur.execute(create_table_sql)
+    conn.commit()
+    cur.close()
+    conn.close()
 
-
-def insert_article(date, source, title, url, summary, categories: list[str], keywords: list[str] | None = None):
-    """categories / keywords 都傳入 list，內部轉成逗號分隔字串儲存"""
+def insert_article(date, source, title, url, summary, categories, keywords):
+    """寫入文章，自動處理重複"""
+    conn = get_connection()
+    cur = conn.cursor()
+    
     cat_str = ",".join(categories)
-    kw_str = ",".join(keywords or [])
-    with get_conn() as conn:
-        try:
-            conn.execute(
-                """INSERT INTO articles (date, source, title, url, summary, categories, keywords)
-                   VALUES (?, ?, ?, ?, ?, ?, ?)""",
-                (date, source, title, url, summary, cat_str, kw_str),
-            )
-            return True
-        except sqlite3.IntegrityError:
-            # URL 已存在，視為已抓取過，跳過
-            return False
+    kw_str = ",".join(keywords)
+    
+    try:
+        if DB_URL:
+            cur.execute("""
+                INSERT INTO articles (date, source, title, url, summary, categories, keywords)
+                VALUES (%s, %s, %s, %s, %s, %s, %s)
+                ON CONFLICT (title) DO NOTHING
+            """, (date, source, title, url, summary, cat_str, kw_str))
+        else:
+            cur.execute("""
+                INSERT OR IGNORE INTO articles (date, source, title, url, summary, categories, keywords)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
+            """, (date, source, title, url, summary, cat_str, kw_str))
+        
+        conn.commit()
+        return True
+    except Exception as e:
+        print(f"Database error: {e}")
+        return False
+    finally:
+        cur.close()
+        conn.close()
 
-
-def query_articles(date_filter=None, category_filter: list[str] | None = None):
-    """
-    date_filter: "YYYY-MM-DD" 或 None（不篩選）
-    category_filter: ["Trends", "Sustainability"] 或 None（不篩選，OR 邏輯：符合任一分類即顯示）
-    """
-    sql = "SELECT * FROM articles WHERE 1=1"
-    params = []
-    if date_filter:
-        sql += " AND date = ?"
-        params.append(date_filter)
-    sql += " ORDER BY date DESC, id DESC"
-
-    with get_conn() as conn:
-        rows = conn.execute(sql, params).fetchall()
-
-    results = []
-    for r in rows:
-        cats = r["categories"].split(",") if r["categories"] else []
-        if category_filter:
-            if not any(c in cats for c in category_filter):
-                continue
-        kws = r["keywords"].split(",") if r["keywords"] else []
-        results.append({
-            "id": r["id"],
-            "date": r["date"],
-            "source": r["source"],
-            "title": r["title"],
-            "url": r["url"],
-            "summary": r["summary"],
-            "categories": cats,
-            "keywords": kws,
-        })
-    return results
-
-
-def get_stats(date_filter=None):
-    """回傳今日總篇數，以及各分類篇數統計（用於前端圖表）"""
-    articles = query_articles(date_filter=date_filter)
-    total = len(articles)
-    cat_counts = {
-        "Corporate & Market": 0,
-        "Trends & Aesthetics": 0,
-        "Supply Chain & Textile Tech": 0,
-        "Sustainability & ESG": 0,
-        "Marketing & Collaborations": 0,
-    }
-    for a in articles:
-        for c in a["categories"]:
-            if c in cat_counts:
-                cat_counts[c] += 1
-    return {"total": total, "by_category": cat_counts}
+def query_articles():
+    """查詢所有文章"""
+    conn = get_connection()
+    cur = conn.cursor()
+    cur.execute("SELECT * FROM articles ORDER BY date DESC")
+    rows = cur.fetchall()
+    cur.close()
+    conn.close()
+    return rows
