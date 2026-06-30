@@ -99,29 +99,33 @@ def query_articles(date_filter=None):
     conn.close()
     return results
 
-def get_stats():
-    """統計各分類文章數量 (修正多分類儲存問題)"""
+def get_stats(date_filter=None): # 務必加上 date_filter=None
+    """統計各分類文章數量"""
     conn = get_connection()
     cur = conn.cursor()
     
-    # 查詢所有分類欄位
-    cur.execute("SELECT categories FROM articles")
+    # 若有日期篩選，加入 WHERE 條件
+    query = "SELECT categories, COUNT(*) as count FROM articles"
+    params = []
+    if date_filter:
+        query += " WHERE date = %s" if DB_URL else " WHERE date = ?"
+        params.append(date_filter)
+    query += " GROUP BY categories"
+    
+    cur.execute(query, params)
     rows = cur.fetchall()
     
     stats = {}
     for row in rows:
-        # 將 row 轉為 dict，並取出分類字串
         r = dict(row)
+        # 處理多分類字串拆解
         cat_field = r.get('categories', '')
-        if not cat_field:
-            continue
-            
-        # 將逗號分隔的字串拆解成列表，並逐一統計
-        categories = cat_field.split(',')
-        for cat in categories:
-            cat = cat.strip()
-            stats[cat] = stats.get(cat, 0) + 1
-            
+        if cat_field:
+            categories = cat_field.split(',')
+            for cat in categories:
+                cat = cat.strip()
+                stats[cat] = stats.get(cat, 0) + r['count']
+        
     cur.close()
     conn.close()
     return stats
