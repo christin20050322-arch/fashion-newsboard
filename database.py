@@ -3,16 +3,14 @@ import sqlite3
 import psycopg2
 from psycopg2.extras import RealDictCursor
 
-# 獲取環境變數 (Railway 會自動提供 DATABASE_URL)
+# 獲取環境變數
 DB_URL = os.environ.get("DATABASE_URL")
 
 def get_connection():
     """自動判斷模式：若有 DB_URL 則連 PostgreSQL，否則用 SQLite"""
     if DB_URL:
-        # PostgreSQL 模式 (Railway)
         return psycopg2.connect(DB_URL, cursor_factory=RealDictCursor)
     else:
-        # SQLite 模式 (本地)
         conn = sqlite3.connect("fashion_news.db")
         conn.row_factory = sqlite3.Row
         return conn
@@ -84,13 +82,16 @@ def insert_article(date, source, title, url, summary, categories, keywords):
         conn.close()
 
 def query_articles(date_filter=None):
+    """查詢文章"""
     conn = get_connection()
     cur = conn.cursor()
+    
     query = "SELECT * FROM articles"
     params = []
     if date_filter:
         query += " WHERE date = %s" if DB_URL else " WHERE date = ?"
         params.append(date_filter)
+        
     cur.execute(query, params)
     rows = cur.fetchall()
     results = [dict(row) for row in rows]
@@ -99,17 +100,19 @@ def query_articles(date_filter=None):
     return results
 
 def get_stats():
-    """統計各類別文章數量"""
+    """統計各分類文章數量"""
     conn = get_connection()
     cur = conn.cursor()
+    # 這裡確保 SQL 可以正確統計
     cur.execute("SELECT categories, COUNT(*) as count FROM articles GROUP BY categories")
     rows = cur.fetchall()
     
-    # 處理回傳格式差異
-    if DB_URL:
-        stats = {row['categories']: row['count'] for row in rows}
-    else:
-        stats = {row['categories']: row['count'] for row in rows}
+    # 轉換成 app.py 需要的格式
+    stats = {}
+    for row in rows:
+        # row 在 RealDictCursor 裡是 dict，在 SQLite Row 裡是物件，用 dict() 轉型最安全
+        r = dict(row)
+        stats[r['categories']] = r['count']
         
     cur.close()
     conn.close()
