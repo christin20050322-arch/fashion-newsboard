@@ -35,6 +35,35 @@ RSS_FEEDS = {
     "Fibre2Fashion - 時尚新聞": "https://feeds.feedburner.com/fibre2fashion/fashion-news",
     "Just Style": "https://www.just-style.com/feed/",
 
+    # === 以下為新增來源（依使用者提供的分類清單）===
+
+    # -- 1. 商業動態 (Corporate & Market) --
+    "Retail Dive": "https://www.retaildive.com/feeds/news/",
+    # Fashion Network 官方條款明確禁止「商業/專業用途」使用其 RSS（包含本系統這種自動彙整用途），
+    # 故不直接訂閱其官方 RSS，改用 Google News 變通取得公開可索引的報導標題，較不踩法律風險。
+    "Fashion Network (Google News)": "https://news.google.com/rss/search?q=site:fashionnetwork.com&hl=zh-TW&gl=TW",
+
+    # -- 2. 流行美學 (Trends & Aesthetics) --
+    "Dezeen": "https://www.dezeen.com/feed/",
+    "It's Nice That (Google News)": "https://news.google.com/rss/search?q=site:itsnicethat.com&hl=en-US&gl=US",
+    "Core77": "https://www.core77.com/blog/rss.xml",
+    "Designboom": "https://www.designboom.com/feed/",
+    "Interior Design (Google News)": "https://news.google.com/rss/search?q=site:interiordesign.net&hl=en-US&gl=US",
+    "Surface Magazine (Google News)": "https://news.google.com/rss/search?q=site:surfacemag.com&hl=en-US&gl=US",
+    "Metropolis Magazine (Google News)": "https://news.google.com/rss/search?q=site:metropolismag.com&hl=en-US&gl=US",
+    # PV市集展屬於貿易展覽會官網，幾乎不提供 RSS，用 Google News 變通取得相關報導
+    "PV市集展 Première Vision (Google News)": "https://news.google.com/rss/search?q=%22Premiere+Vision%22&hl=zh-TW&gl=TW",
+
+    # -- 3. 供應鏈與紡織技術 (Supply Chain & Textile Tech) --
+    # MILANO UNICA 同樣是展會官網，無官方 RSS，用 Google News 變通
+    "MILANO UNICA (Google News)": "https://news.google.com/rss/search?q=%22Milano+Unica%22&hl=zh-TW&gl=TW",
+    "Innovation in Textiles (Google News)": "https://news.google.com/rss/search?q=site:innovationintextiles.com&hl=en-US&gl=US",
+
+    # -- 4. 行銷聯名 (Marketing & Collaborations) --
+    "Marketing Dive": "https://www.marketingdive.com/feeds/news/",
+    # SPINEXPO 是展會網站，Communication 分區無獨立 RSS，用 Google News 變通
+    "SPINEXPO Communication (Google News)": "https://news.google.com/rss/search?q=%22SPINEXPO%22&hl=zh-TW&gl=TW",
+
     # --- 沒有官方 RSS 的來源，透過 Google News 包成 RSS 變通取得 ---
     "Vogue Business (Google News)":      "https://news.google.com/rss/search?q=site:voguebusiness.com&hl=zh-TW&gl=TW",
     "Sourcing Journal (Google News)":    "https://news.google.com/rss/search?q=site:sourcingjournal.com&hl=en-US&gl=US",
@@ -51,14 +80,23 @@ RSS_FEEDS = {
     # 如果某一個來源一直抓不到文章，可以把該行刪除或註解掉（在行首加 # ）即可，不影響其他來源運作。
 }
 
-API_BASE = "https://fashion-newsboard-production.up.railway.app/"  # 後端 FastAPI 服務位址
+
+API_BASE = "http://127.0.0.1:8000"  # 後端 FastAPI 服務位址
 
 
 def parse_date(entry) -> str:
-    """嘗試從 RSS entry 解析發布日期，失敗則用今天"""
-    if hasattr(entry, "published_parsed") and entry.published_parsed:
-        dt = datetime.datetime(*entry.published_parsed[:6])
-        return dt.date().isoformat()
+    """
+    回傳這篇文章要被歸到看板上的「日期」。
+
+    設計考量：這個系統定位是「每日新聞情報看板」，篩選器的「日期」應該代表
+    「我哪一天抓到了這些新聞」，而不是文章本身原始的發布時間。
+    因為很多 RSS / Google News 來源裡混雜了大量數月、甚至數年前的舊文章
+    （原始發布日期落在過去），如果用原始發布日期儲存，會導致使用者選某一天時
+    幾乎抓不到任何資料 —— 因為文章原始日期幾乎不會剛好落在使用者選的那天。
+
+    所以這裡固定回傳「程式執行（抓取）當天」的日期，讓每次跑 rss_fetcher.py
+    抓到的所有文章，都統一歸在當天，篩選器才會跟「哪天抓的」這個直覺一致。
+    """
     return datetime.date.today().isoformat()
 
 
@@ -76,7 +114,7 @@ def fetch_and_push():
             title = getattr(entry, "title", "").strip()
             url = getattr(entry, "link", "").strip()
             raw_summary = getattr(entry, "summary", "") or getattr(entry, "description", "")
-            date = parse_date(entry)
+            date = parse_date(entry)  # = 今天（抓取當天），詳見函式內說明
 
             if not title or not url:
                 continue
