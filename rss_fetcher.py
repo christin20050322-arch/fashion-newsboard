@@ -81,7 +81,18 @@ RSS_FEEDS = {
 }
 
 
-API_BASE = "http://127.0.0.1:8000"  # 後端 FastAPI 服務位址
+import os
+
+# 後端 FastAPI 服務位址。
+# 重要修正：原本寫死 "http://127.0.0.1:8000"（本機位址），
+# 導致你在自己電腦執行這支腳本時，抓到的新聞其實是送到「你自己電腦的本機伺服器」，
+# 完全沒有送進 Railway 上的正式資料庫，跟你在瀏覽器看到的正式網站是兩個獨立的東西。
+#
+# 現在改成預設指向正式 Railway 網址；如果你之後想切換回本機測試，
+# 可以用環境變數覆寫，例如本機測試時執行：
+#   set API_BASE=http://127.0.0.1:8000   (Windows)
+#   export API_BASE=http://127.0.0.1:8000 (Mac/Linux)
+API_BASE = os.environ.get("API_BASE", "https://fashion-newsboard-production.up.railway.app")
 
 
 def parse_date(entry) -> str:
