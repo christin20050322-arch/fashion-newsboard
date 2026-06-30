@@ -51,7 +51,7 @@ RSS_FEEDS = {
     # 如果某一個來源一直抓不到文章，可以把該行刪除或註解掉（在行首加 # ）即可，不影響其他來源運作。
 }
 
-API_BASE = "http://127.0.0.1:8000"  # 後端 FastAPI 服務位址
+API_BASE = "https://fashion-newsboard-production.up.railway.app/"  # 後端 FastAPI 服務位址
 
 
 def parse_date(entry) -> str:
