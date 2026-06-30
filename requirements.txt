@@ -1,6 +1,5 @@
 fastapi
-uvicorn[standard]
-pydantic
-feedparser
+uvicorn
 requests
-anthropic
+psycopg2-binary
+pydantic
