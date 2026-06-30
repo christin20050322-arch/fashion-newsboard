@@ -9,23 +9,17 @@ from contextlib import asynccontextmanager
 
 from database import init_db, insert_article, query_articles, get_stats
 from classifier import classify_article, CATEGORIES
-import seed_demo  # 確保與你的 seed_demo.py 檔案名稱一致
 
 # --- 1. 定義生命週期管理 (Lifespan) ---
+# 注意：正式環境的 lifespan 只應該做「初始化資料庫結構」，
+# 不該呼叫 seed_demo.run_seed()。
+# 之前的版本每次伺服器啟動（=每次 Railway 重新部署）都會塞入示範資料，
+# 這在概念上是錯的：示範資料只該在「本機第一次測試」時手動執行一次
+# （python seed_demo.py），不該綁進正式網站的啟動流程。
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # 伺服器啟動時：初始化 DB 並同步關鍵詞
     init_db()
-    print("正在啟動：正在檢查與更新資料庫關鍵詞...")
-    try:
-        # 呼叫 seed_demo.py 裡的函數
-        # 請確認 seed_demo.py 內包含 def run_seed():
-        seed_demo.run_seed() 
-        print("資料庫關鍵詞檢查與更新完成！")
-    except Exception as e:
-        print(f"資料庫更新失敗: {e}")
-    yield  # 應用程式在此處開始運行
-    # 伺服器關閉時（這裡可以留空）
+    yield
 
 # --- 2. 初始化 FastAPI 並掛載 lifespan ---
 app = FastAPI(title="每日時尚與紡織產業新聞情報看板", lifespan=lifespan)
