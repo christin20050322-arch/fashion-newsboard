@@ -22,22 +22,33 @@ def init_db():
     conn = get_connection()
     cur = conn.cursor()
     
-    # 使用通用 SQL 語法
-    create_table_sql = """
-    CREATE TABLE IF NOT EXISTS articles (
-        id SERIAL PRIMARY KEY,
-        date TEXT,
-        source TEXT,
-        title TEXT UNIQUE,
-        url TEXT,
-        summary TEXT,
-        categories TEXT,
-        keywords TEXT
-    );
-    """
-    # 針對 SQLite 調整 (SQLite 不支援 SERIAL，需用 INTEGER PRIMARY KEY)
-    if not DB_URL:
-        create_table_sql = create_table_sql.replace("SERIAL PRIMARY KEY", "INTEGER PRIMARY KEY AUTOINCREMENT")
+    # 針對兩者差異使用 SQL
+    if DB_URL:
+        create_table_sql = """
+        CREATE TABLE IF NOT EXISTS articles (
+            id SERIAL PRIMARY KEY,
+            date TEXT,
+            source TEXT,
+            title TEXT UNIQUE,
+            url TEXT,
+            summary TEXT,
+            categories TEXT,
+            keywords TEXT
+        );
+        """
+    else:
+        create_table_sql = """
+        CREATE TABLE IF NOT EXISTS articles (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            date TEXT,
+            source TEXT,
+            title TEXT UNIQUE,
+            url TEXT,
+            summary TEXT,
+            categories TEXT,
+            keywords TEXT
+        );
+        """
     
     cur.execute(create_table_sql)
     conn.commit()
@@ -68,18 +79,45 @@ def insert_article(date, source, title, url, summary, categories, keywords):
         conn.commit()
         return True
     except Exception as e:
-        print(f"Database error: {e}")
+        print(f"Database insert error: {e}")
         return False
     finally:
         cur.close()
         conn.close()
 
-def query_articles():
-    """查詢所有文章"""
+def query_articles(date_filter=None, category_filter=None):
+    """查詢文章 (支援篩選)"""
     conn = get_connection()
     cur = conn.cursor()
-    cur.execute("SELECT * FROM articles ORDER BY date DESC")
+    
+    query = "SELECT * FROM articles WHERE 1=1"
+    params = []
+    
+    if date_filter:
+        query += " AND date = ?" if not DB_URL else " AND date = %s"
+        params.append(date_filter)
+        
+    cur.execute(query, params)
     rows = cur.fetchall()
+    
+    # 將 dict 或 Row 轉為一般列表輸出
+    results = [dict(row) for row in rows]
+    
     cur.close()
     conn.close()
-    return rows
+    return results
+
+def get_stats(date_filter=None):
+    """統計各分類文章數量"""
+    conn = get_connection()
+    cur = conn.cursor()
+    
+    query = "SELECT categories, COUNT(*) as count FROM articles GROUP BY categories"
+    cur.execute(query)
+    rows = cur.fetchall()
+    
+    stats = {dict(row)["categories"]: dict(row)["count"] for row in rows}
+    
+    cur.close()
+    conn.close()
+    return stats
