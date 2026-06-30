@@ -22,7 +22,7 @@ def init_db():
     conn = get_connection()
     cur = conn.cursor()
     
-    # 針對兩者差異使用 SQL
+    # 建立表格
     if DB_URL:
         create_table_sql = """
         CREATE TABLE IF NOT EXISTS articles (
@@ -59,9 +59,8 @@ def insert_article(date, source, title, url, summary, categories, keywords):
     """寫入文章，自動處理重複"""
     conn = get_connection()
     cur = conn.cursor()
-    
-    cat_str = ",".join(categories)
-    kw_str = ",".join(keywords)
+    cat_str = ",".join(categories) if isinstance(categories, list) else categories
+    kw_str = ",".join(keywords) if isinstance(keywords, list) else keywords
     
     try:
         if DB_URL:
@@ -75,49 +74,43 @@ def insert_article(date, source, title, url, summary, categories, keywords):
                 INSERT OR IGNORE INTO articles (date, source, title, url, summary, categories, keywords)
                 VALUES (?, ?, ?, ?, ?, ?, ?)
             """, (date, source, title, url, summary, cat_str, kw_str))
-        
         conn.commit()
         return True
     except Exception as e:
-        print(f"Database insert error: {e}")
+        print(f"Insert error: {e}")
         return False
     finally:
         cur.close()
         conn.close()
 
-def query_articles(date_filter=None, category_filter=None):
-    """查詢文章 (支援篩選)"""
+def query_articles(date_filter=None):
     conn = get_connection()
     cur = conn.cursor()
-    
-    query = "SELECT * FROM articles WHERE 1=1"
+    query = "SELECT * FROM articles"
     params = []
-    
     if date_filter:
-        query += " AND date = ?" if not DB_URL else " AND date = %s"
+        query += " WHERE date = %s" if DB_URL else " WHERE date = ?"
         params.append(date_filter)
-        
     cur.execute(query, params)
     rows = cur.fetchall()
-    
-    # 將 dict 或 Row 轉為一般列表輸出
     results = [dict(row) for row in rows]
-    
     cur.close()
     conn.close()
     return results
 
-def get_stats(date_filter=None):
-    """統計各分類文章數量"""
+def get_stats():
+    """統計各類別文章數量"""
     conn = get_connection()
     cur = conn.cursor()
-    
-    query = "SELECT categories, COUNT(*) as count FROM articles GROUP BY categories"
-    cur.execute(query)
+    cur.execute("SELECT categories, COUNT(*) as count FROM articles GROUP BY categories")
     rows = cur.fetchall()
     
-    stats = {dict(row)["categories"]: dict(row)["count"] for row in rows}
-    
+    # 處理回傳格式差異
+    if DB_URL:
+        stats = {row['categories']: row['count'] for row in rows}
+    else:
+        stats = {row['categories']: row['count'] for row in rows}
+        
     cur.close()
     conn.close()
     return stats
